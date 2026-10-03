@@ -5,6 +5,25 @@ A frank ledger of what is incomplete or imperfect as of v0.1.0. Detection is
 heuristic by design; see also [`limits.md`](limits.md) and
 [`threat-model.md`](threat-model.md).
 
+## Verification status (read this first)
+
+This is an **experimental, not security-audited** project. Be skeptical of every
+result below — they are self-reported, not independently verified:
+
+- The test suite's reported result is **122 passing on Windows / CPython
+  3.12**, with **3 symlink tests skipped** (the dev machine cannot create
+  symlinks). Those three run only where symlinks are permitted.
+- **Linux, macOS and Python 3.9 are not verified.** The dev machine is Windows
+  with only CPython 3.12. The 3.9 claim is a grammar check, not a real 3.9 run.
+- **CI does not currently run.** GitHub Actions runs for this repository fail at
+  startup, before any job begins (`startup_failure`, 0 jobs). The workflow file
+  parses and is registered active, so the cause is not the YAML; the actual
+  cause is **unconfirmed** (not attributed to billing without evidence).
+- The **security fixes have not been independently verified or audited.** They
+  were made and tested by the same process that wrote them.
+- nation-guard provides **no guaranteed protection**. It is a heuristic detector
+  and advisory hardening aid, not a sandbox.
+
 ## Detection gaps (false negatives)
 
 - **Novel rephrasing** of an attack that no rule pattern anticipates is not

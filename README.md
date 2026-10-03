@@ -3,11 +3,18 @@
 
 **An experimental, local-first prompt-injection scanner and integrity tool for AI agent instruction/config files.**
 
-> ⚠️ **Experimental / pre-1.0.** This is a heuristic detector, not a sandbox or
-> a guarantee. It catches known prompt-injection, exfiltration and auto-exec
-> techniques plus common obfuscations — it does **not** catch everything, and it
-> has documented false positives. **Read [`docs/known-gaps.md`](docs/known-gaps.md)
-> and [`docs/limits.md`](docs/limits.md) before relying on it.**
+> ⚠️ **Experimental / pre-1.0 — not security-audited.** This is a heuristic
+> detector, not a sandbox and not guaranteed protection. It catches known
+> prompt-injection, exfiltration and auto-exec techniques plus common
+> obfuscations — it does **not** catch everything, and it has documented false
+> positives. **Read [`docs/known-gaps.md`](docs/known-gaps.md) and
+> [`docs/limits.md`](docs/limits.md) before relying on it.**
+>
+> **Verification status (be skeptical):** the test suite's reported result is
+> **122 passing on Windows / CPython 3.12, with 3 symlink tests skipped**.
+> **Linux, macOS and Python 3.9 are not yet verified**, CI does not currently
+> run (see below), and the security fixes have **not been independently
+> verified or audited**. Treat all results here as self-reported.
 
 AI coding agents read files like `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
 `.cursorrules`, `.mcp.json` and `.vscode/tasks.json` as *trusted instructions*.
@@ -119,7 +126,7 @@ See [`docs/threat-model.md`](docs/threat-model.md), [`docs/privacy.md`](docs/pri
 No dependencies to install for development (Python 3.9+). Exact commands:
 
 ```bash
-# Run the full test suite (94 tests).
+# Run the full test suite (122 tests; 3 symlink tests skip without symlink perms).
 python -m unittest discover -s tests -p "test_*.py" -v
 
 # Static check for known network/subprocess/dynamic-import constructs in guard/.
@@ -140,8 +147,14 @@ python -m venv /tmp/ngvenv
 /tmp/ngvenv/bin/nation-guard scan --root .
 ```
 
-CI (`.github/workflows/ci.yml`) runs the suite on ubuntu/windows/macOS × Python
-3.9/3.12, builds and clean-installs the wheel, and scans the repo itself.
+CI (`.github/workflows/ci.yml`) is **configured** to run the suite on
+ubuntu/windows/macOS × Python 3.9/3.12, build and clean-install the wheel, and
+scan the repo itself. **It is not currently running:** Actions runs for this
+repository fail at startup, before any job begins (`startup_failure`, 0 jobs).
+The workflow file parses and is registered active, so the cause is **not** the
+YAML; the actual cause is **unconfirmed**. Until that is resolved, the
+cross-platform/Python-3.9 results above are **not available** — the only
+executed results are the self-reported Windows/CPython 3.12 run.
 
 ## License
 

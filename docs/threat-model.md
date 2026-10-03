@@ -35,9 +35,12 @@ document the agent ingests and is tricked into persisting. The attacker does
 - **Integrity drift.** Given a recorded baseline, `verify` deterministically
   reports changed/new/removed config files (SHA-256) and added/removed/changed
   MCP server definitions.
-- **No outbound capability in the guard.** `tools/check_no_network.py` statically
-  proves `guard/` imports no network/subprocess/dynamic-exec module, so scanning
-  hostile input cannot trigger I/O.
+- **No outbound capability in the guard (checked, not proven).**
+  `tools/check_no_network.py` statically scans `guard/` for **known**
+  network/subprocess/dynamic-import constructs (imports of `socket`, `urllib`,
+  `subprocess`, `importlib`, …, and `eval`/`exec`/`import_module` calls). It is
+  a construct check over the known surface — strong defense-in-depth alongside
+  reading the small codebase, but not a proof that no I/O is possible.
 - **Tamper-evident quarantine.** A restored file is verified against the SHA-256
   recorded at capture time and will not silently overwrite an existing file.
 - **State isolation.** The guard refuses to place its state inside the scanned
