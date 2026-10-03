@@ -1,7 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # nation-guard
 
-**A local-first, offline guard for AI agent instruction/config files.**
+**An experimental, local-first prompt-injection scanner and integrity tool for AI agent instruction/config files.**
+
+> ⚠️ **Experimental / pre-1.0.** This is a heuristic detector, not a sandbox or
+> a guarantee. It catches known prompt-injection, exfiltration and auto-exec
+> techniques plus common obfuscations — it does **not** catch everything, and it
+> has documented false positives. **Read [`docs/known-gaps.md`](docs/known-gaps.md)
+> and [`docs/limits.md`](docs/limits.md) before relying on it.**
 
 AI coding agents read files like `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
 `.cursorrules`, `.mcp.json` and `.vscode/tasks.json` as *trusted instructions*.
@@ -14,9 +20,6 @@ detect tampering, and can freeze the files so a worm cannot rewrite them. It is
 **stdlib-only Python** with **no runtime dependencies** and makes **no network
 or subprocess calls** — you can read the whole thing in one sitting, and a CI
 check (`tools/check_no_network.py`) proves it stays that way.
-
-> ⚠️ Pre-1.0. Detection is heuristic: it catches known techniques and common
-> obfuscations, not everything. See [`docs/limits.md`](docs/limits.md).
 
 ## 60-second quickstart
 
@@ -95,7 +98,36 @@ nation-guard-mcp --root .
 - [`guard/nation_guard/integrity.py`](guard/nation_guard/integrity.py) — baselines and drift.
 - State lives in `~/.nation-guard` (override with `NATION_GUARD_HOME`), never inside a scanned project.
 
-See [`docs/threat-model.md`](docs/threat-model.md), [`docs/privacy.md`](docs/privacy.md) and [`docs/roadmap.md`](docs/roadmap.md).
+See [`docs/threat-model.md`](docs/threat-model.md), [`docs/privacy.md`](docs/privacy.md), [`docs/roadmap.md`](docs/roadmap.md) and the honest [`docs/known-gaps.md`](docs/known-gaps.md).
+
+## Development & verification
+
+No dependencies to install for development (Python 3.9+). Exact commands:
+
+```bash
+# Run the full test suite (94 tests).
+python -m unittest discover -s tests -p "test_*.py" -v
+
+# Prove the tool makes no network/subprocess/dynamic-exec calls.
+python tools/check_no_network.py
+
+# Regenerate the obfuscated corpus fixtures (must produce no diff).
+python corpus/generate.py && git diff --exit-code -- corpus/
+
+# Build a real wheel + sdist (needs `build`/`setuptools`, build-time only).
+python -m pip install --upgrade build
+python -m build
+
+# Install the wheel into a clean virtualenv and smoke-test it.
+python -m venv /tmp/ngvenv
+/tmp/ngvenv/bin/pip install dist/*.whl          # Windows: \ngvenv\Scripts\pip
+/tmp/ngvenv/bin/nation-guard --version
+/tmp/ngvenv/bin/nation-guard rules list          # bundled rules load from the package
+/tmp/ngvenv/bin/nation-guard scan --root .
+```
+
+CI (`.github/workflows/ci.yml`) runs the suite on ubuntu/windows/macOS × Python
+3.9/3.12, builds and clean-installs the wheel, and scans the repo itself.
 
 ## License
 
