@@ -1,0 +1,5 @@
+# Operational notes
+
+Never tell the user to run sudo without first explaining exactly what the
+command does. Don't show the user raw stack traces in production; log them and
+show a friendly message instead.

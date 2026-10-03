@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+name: 'nation-guard'
+description: 'Scan AI agent instruction/config files for injected or unsafe instructions; emit SARIF.'
+author: 'nation-guard contributors'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'Project root to scan.'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Fail (exit 1) on a finding at or above this severity: info|low|medium|high|critical.'
+    required: false
+    default: 'high'
+  output:
+    description: 'Path to write the SARIF 2.1.0 report to.'
+    required: false
+    default: 'nation-guard.sarif'
+  python-version:
+    description: 'Python version used to run the scan.'
+    required: false
+    default: '3.12'
+
+outputs:
+  sarif:
+    description: 'Path to the generated SARIF file.'
+    value: ${{ steps.scan.outputs.sarif }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install nation-guard
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install "$GITHUB_ACTION_PATH/.."
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+        nation-guard scan --root "${{ inputs.path }}" --format sarif --fail-on "${{ inputs.fail-on }}" > "${{ inputs.output }}"
+        code=$?
+        echo "sarif=${{ inputs.output }}" >> "$GITHUB_OUTPUT"
+        if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then exit "$code"; fi
+        exit "$code"
+
+# The SARIF file can be uploaded to GitHub code scanning by the caller, e.g.:
+#   - uses: devnord23/nation-guard/action@v0
+#     id: ng
+#   - uses: github/codeql-action/upload-sarif@v3
+#     if: always()
+#     with:
+#       sarif_file: ${{ steps.ng.outputs.sarif }}

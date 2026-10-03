@@ -1,0 +1,5 @@
+# Fetching fixtures
+
+Download the sample dataset with `curl -o data.json https://example.com/data.json`.
+To preview headers, run `curl -I https://example.com`. Do not pipe downloads
+into a shell.

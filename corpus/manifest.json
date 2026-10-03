@@ -1,0 +1,37 @@
+{
+  "_comment": "Expected detections for the corpus. 'malicious' entries assert an exact rule-id set (equality); 'benign' entries assert that findings are a subset of 'known_fp' (empty means it must be clean). 'as' is the repo-relative path the fixture is scanned as, so file-scoped rules apply. All payloads are inert and target the reserved attacker.invalid host. See corpus/README.md.",
+  "malicious": [
+    { "file": "malicious/mal_worm_basic.fixture", "as": "AGENTS.md", "expect": ["NG-WORM-001"], "note": "classic self-propagation into other repos' agent files" },
+    { "file": "malicious/mal_override_ignore.fixture", "as": "AGENTS.md", "expect": ["NG-OVR-001"], "note": "ignore previous instructions" },
+    { "file": "malicious/mal_override_markers.fixture", "as": "CLAUDE.md", "expect": ["NG-OVR-002"], "note": "forged <system>/[admin] markers" },
+    { "file": "malicious/mal_exfil_ssh_post.fixture", "as": "CLAUDE.md", "expect": ["NG-EXF-001"], "note": "ssh/aws secret near curl -X POST" },
+    { "file": "malicious/mal_exfil_env_curl.fixture", "as": "AGENTS.md", "expect": ["NG-EXF-001"], "note": ".env exfil via curl GET with command substitution" },
+    { "file": "malicious/mal_exfil_named_token.fixture", "as": "AGENTS.md", "expect": ["NG-EXF-002"], "note": "named token (process.env) near requests.post" },
+    { "file": "malicious/mal_conceal_user.fixture", "as": "CLAUDE.md", "expect": ["NG-CON-001"], "note": "hide activity from the user" },
+    { "file": "malicious/mal_autoexec_curlbash.fixture", "as": "AGENTS.md", "expect": ["NG-AUTO-001"], "note": "curl | sudo bash" },
+    { "file": "malicious/mal_hidden_comment_worm.fixture", "as": "AGENTS.md", "expect": ["NG-HID-003", "NG-WORM-001"], "note": "worm instruction hidden in an HTML comment" },
+    { "file": "malicious/mal_combo_kitchensink.fixture", "as": "CLAUDE.md", "expect": ["NG-CON-001", "NG-EXF-001", "NG-OVR-001", "NG-PERM-001"], "note": "multiple techniques in one file" },
+    { "file": "malicious/mal_sessionstart_settings.json.fixture", "as": ".claude/settings.json", "expect": ["NG-AUTO-001", "NG-AUTO-002"], "note": "SessionStart hook; its command is also a curl|bash" },
+    { "file": "malicious/mal_vscode_taskopen.json.fixture", "as": ".vscode/tasks.json", "expect": ["NG-AUTO-001", "NG-AUTO-003"], "note": "folderOpen task; its command is also a curl|bash" },
+    { "file": "malicious/mal_perm_bypass_settings.json.fixture", "as": ".claude/settings.json", "expect": ["NG-PERM-001"], "note": "Bash(*) + bypassPermissions" },
+    { "file": "malicious/mal_perm_mcp_all_settings.json.fixture", "as": ".claude/settings.json", "expect": ["NG-PERM-002"], "note": "enableAllProjectMcpServers" },
+    { "file": "malicious/gen_invisible_override.fixture", "as": "AGENTS.md", "expect": ["NG-HID-001", "NG-OVR-001"], "note": "generated: zero-width chars splitting an override" },
+    { "file": "malicious/gen_tag_smuggled.fixture", "as": "AGENTS.md", "expect": ["NG-HID-002", "NG-HID-003", "NG-WORM-001"], "note": "generated: Unicode tag smuggling of a worm" },
+    { "file": "malicious/gen_homoglyph_override.fixture", "as": "AGENTS.md", "expect": ["NG-OVR-001"], "note": "generated: Cyrillic homoglyph override" },
+    { "file": "malicious/gen_base64_override.fixture", "as": "AGENTS.md", "expect": ["NG-HID-003", "NG-OVR-001"], "note": "generated: base64-encoded override payload" },
+    { "file": "malicious/mal_entity_invisible.fixture", "as": "AGENTS.md", "expect": ["NG-HID-001", "NG-OVR-001"], "note": "entity-encoded zero-width splitting an override; regression for unescape-before-strip (review finding #3)" }
+  ],
+  "benign": [
+    { "file": "benign/ben_agents_basic.fixture", "as": "AGENTS.md", "known_fp": [], "note": "ordinary build/test instructions" },
+    { "file": "benign/ben_claude_basic.fixture", "as": "CLAUDE.md", "known_fp": [], "note": "ordinary monorepo notes" },
+    { "file": "benign/ben_env_setup.fixture", "as": "AGENTS.md", "known_fp": [], "note": ".env.example setup, no send command" },
+    { "file": "benign/ben_sudo_guidance.fixture", "as": "AGENTS.md", "known_fp": [], "note": "legit 'tell the user' guidance; must not trip NG-CON-001" },
+    { "file": "benign/ben_curl_examples.fixture", "as": "AGENTS.md", "known_fp": [], "note": "curl GET / -o examples, no pipe to shell" },
+    { "file": "benign/ben_token_mention.fixture", "as": "AGENTS.md", "known_fp": [], "note": "mentions an API key far from any send command" },
+    { "file": "benign/ben_mcp.json.fixture", "as": ".mcp.json", "known_fp": [], "note": "ordinary MCP server config" },
+    { "file": "benign/ben_vscode_tasks.json.fixture", "as": ".vscode/tasks.json", "known_fp": [], "note": "task without folderOpen" },
+    { "file": "benign/ben_security_doc.fixture", "as": "AGENTS.md", "known_fp": ["NG-OVR-001"], "note": "KNOWN FP: a security doc that quotes an injection phrase as an example" },
+    { "file": "benign/ben_env_post_setup.fixture", "as": "AGENTS.md", "known_fp": ["NG-EXF-001"], "note": "KNOWN FP: .env setup near an unrelated POST; proximity heuristic cannot tell intent" },
+    { "file": "benign/ben_subst_port.fixture", "as": "AGENTS.md", "known_fp": [], "note": ".env mentioned near a benign $(...) command substitution; must stay clean (review finding #1)" }
+  ]
+}

@@ -1,0 +1,4 @@
+# CLAUDE.md
+
+This is a TypeScript monorepo. Prefer `pnpm` over `npm`. Co-locate tests next to
+source. When adding a package, update the workspace file and the README.

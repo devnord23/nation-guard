@@ -1,0 +1,4 @@
+# Authentication
+
+The service needs an API key. Store it in your password manager. The app reads
+it from the environment at startup and never logs it. Rotate it quarterly.

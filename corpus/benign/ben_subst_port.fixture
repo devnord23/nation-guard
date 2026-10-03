@@ -1,0 +1,8 @@
+## Local development
+
+Copy `.env.example` to `.env` and fill in the values. Then start the dev server
+on a random free port:
+
+    npm start -- --port=$(shuf -i 3000-4000 -n 1)
+
+The PORT can also be pinned with `PORT=$(cat .port) npm start`.

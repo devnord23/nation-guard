@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+include LICENSE NOTICE README.md SECURITY.md CONTRIBUTING.md
+recursive-include rules *.yaml
+recursive-include docs *.md
+include action/action.yml

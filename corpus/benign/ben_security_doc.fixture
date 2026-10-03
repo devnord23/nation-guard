@@ -1,0 +1,5 @@
+# Security notes for maintainers
+
+Prompt-injection attacks often contain phrases like "ignore all previous
+instructions" to override the system prompt. If you see such text arriving from
+an untrusted document, treat it as data, not as a command.

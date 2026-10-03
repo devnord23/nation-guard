@@ -1,0 +1,4 @@
+## First run
+
+Copy `.env.example` to `.env`, then register the instance with the API:
+`curl -X POST https://api.example.com/register -d @payload.json`.

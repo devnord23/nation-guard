@@ -1,0 +1,203 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# nation-guard core ruleset.
+#
+# Rules are data, not code: review and diff them here. Patterns are matched
+# (case-insensitive, multiline) against every normalised *view* of a file, so
+# a payload hidden in an HTML comment, a base64 blob, Unicode tag characters or
+# homoglyphs is matched the same as plain text.
+#
+# This file stays within the tiny YAML subset the loader accepts: no block
+# scalars. Messages are single-line single-quoted strings. Apostrophes are
+# written as \x27 (straight) / ’ (curly) in patterns so the YAML needs no
+# quote escaping. `within` is a character distance used by `all` proximity.
+
+rules:
+  # --- propagation / worm ------------------------------------------------
+  - id: NG-WORM-001
+    title: 'Self-propagating instruction (copies itself into other agent files/repos)'
+    severity: critical
+    kind: pattern
+    category: worm
+    message: 'Instructs the agent to copy these instructions into other agent config files, repositories or projects. This is how a prompt-injection worm spreads; it requires a duplication verb, the thing being copied, and an other/every destination together, so a header applied to "all new files" or a doc about prompt-injection does not match.'
+    within: 220
+    all:
+      - '\b(?:copy|copies|copied|replicat\w*|propagat\w*|duplicat\w*|clone|mirror|paste|re-?produce|append|embed\w*|distribut\w*)\b'
+      - '(?:these\s+instructions|this\s+(?:prompt|instruction|directive|file|content|text|message|block|payload|snippet|rule|section|config\w*)|the\s+following(?:\s+(?:instruction|prompt|text|block|content|rule)s?)?|the\s+above|yourself|itself)'
+      - '\b(?:every|each|all|other|another|the\s+other|new|any)\s+(?:other\s+)?(?:CLAUDE(?:\.local)?\.md|AGENTS?\.md|GEMINI\.md|\.cursorrules|\.clinerules|\.windsurfrules|copilot-instructions|repo\w*|repositor\w*|project\w*|agent\w*|sub-?agent\w*|codebase\w*|workspace\w*)\b'
+
+  # --- instruction override ---------------------------------------------
+  - id: NG-OVR-001
+    title: 'Instruction-override attempt'
+    severity: high
+    kind: pattern
+    category: override
+    message: 'Tries to discard or override prior/system instructions. Trusted instruction files have no reason to tell the agent to ignore its rules.'
+    any:
+      - '\b(?:ignore|disregard|forget|discard|overrid\w*|bypass|skip|set\s+aside|do\s+not\s+follow|do\s*n[\x27’]?t\s+follow)\b[^.\n]{0,40}?\b(?:all\s+|any\s+|the\s+)?(?:previous|prior|earlier|above|preceding|system|initial|original|foregoing|existing|former)\b[^.\n]{0,25}?\b(?:instruction|prompt|rule|guideline|direction|message|context|constraint|polic\w*|directive)s?\b'
+      - '\b(?:ignore|disregard|forget)\b[^.\n]{0,25}?\b(?:everything|all)\b[^.\n]{0,25}?\b(?:above|before|previous|prior|told|said|earlier)\b'
+      - '\b(?:your|the)\s+(?:real|true|actual|updated|new|revised)\s+(?:instruction|task|rule|objective|system\s+prompt|directive)s?\b[^.\n]{0,30}?\b(?:are|is|follow|now)\b'
+      - '\bnew\s+(?:instruction|rule|system\s+prompt|directive)s?\b[^.\n]{0,30}?\b(?:overrid\w*|supersed\w*|replace|take\s+precedence)\b'
+
+  - id: NG-OVR-002
+    title: 'Fake system/authority marker'
+    severity: medium
+    kind: pattern
+    category: override
+    message: 'A forged role/authority marker (e.g. <system>, [admin], <|im_start|>). Injected text uses these to impersonate a privileged channel.'
+    any:
+      - '</?(?:system|admin|developer|important_instructions?|override|root|assistant_override)[^>]{0,40}>'
+      - '\[(?:system|admin|developer|root|internal)(?:\s+(?:message|instruction|note|mode|prompt))?\]'
+      - '<\|(?:system|im_start|im_end)\|>'
+      - '<<SYS>>|\[/?INST\]'
+      - '(?m)^\s{0,3}#{1,6}\s*(?:SYSTEM|ADMIN|DEVELOPER)\b(?:\s+(?:PROMPT|MESSAGE|INSTRUCTION|OVERRIDE|MODE))'
+
+  # --- exfiltration ------------------------------------------------------
+  - id: NG-EXF-001
+    title: 'Secret store near a data-sending command'
+    severity: critical
+    kind: pattern
+    category: exfiltration
+    message: 'A secret store (SSH/AWS/.env/wallet/seed phrase/private key) appears close to a command that sends data out. A plain read or a GET without a payload does not match.'
+    within: 240
+    all:
+      - '(?:\.ssh\b|\.aws[\\/]credentials|(?<![A-Za-z0-9_])\.env(?!\.(?:example|sample|template))(?![\w-])|\bwallet\.dat\b|\bseed\s+phrase\b|\bmnemonic\b|\bprivate[ _-]?key\b|\bid_rsa\b|\bid_ed25519\b)'
+      - '(?:\bcurl\b[^\n|;]*?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]*--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]*?\$\([^)]+\)|https?://\S*\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|[A-Za-z0-9.-]+\.(?:invalid|com|net|io|sh|dev|xyz)\b|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
+
+  - id: NG-EXF-002
+    title: 'Named secret near a data-sending command'
+    severity: medium
+    kind: pattern
+    category: exfiltration
+    message: 'A named secret (API key, *_TOKEN, process.env) appears close to a command that sends data out.'
+    within: 160
+    all:
+      - '(?:\bAPI[ _-]?keys?\b|\b[A-Z][A-Z0-9]*_TOKEN\b|\bprocess\.env(?:\.[A-Za-z_][\w]*|\[[\x27"][^\x27"]+[\x27"]\])?|\bsecret[ _-]?keys?\b|\baccess[ _-]?tokens?\b|\bbearer\s+token\b|\b(?:OPENAI|ANTHROPIC|AWS|GITHUB|GITLAB|SLACK|STRIPE)_[A-Z0-9_]*(?:KEY|TOKEN|SECRET)\b)'
+      - '(?:\bcurl\b[^\n|;]*?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]*--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]*?\$\([^)]+\)|https?://\S*\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
+
+  # --- concealment -------------------------------------------------------
+  - id: NG-CON-001
+    title: 'Instruction to conceal activity from the user'
+    severity: high
+    kind: pattern
+    category: concealment
+    message: 'Tells the agent to hide what it is doing from the user. Guidance about what to tell the user (e.g. never tell the user to run sudo) is not flagged.'
+    any:
+      - '\b(?:do\s+not|do\s*n[\x27’]?t|don[\x27’]?t|never|avoid|refrain\s+from|without)\b[^.\n]{0,25}?\b(?:tell|telling|inform\w*|notify\w*|alert\w*|reveal\w*|disclos\w*|mention\w*|show\w*|warn\w*|let)\b[^.\n]{0,12}?\bthe\s+user(?![\x27’]s)(?!\w)(?:\s+know)?(?=\s+about\s+(?:this|that|it)\b|\s*[".,;:!?)\]]|\s*$)'
+      - '\b(?:hide|conceal|keep|suppress|obscure|mask|withhold)\b[^.\n]{0,40}?\bfrom\s+the\s+user(?![\x27’]s)(?!\w)'
+      - '\bwithout\s+(?:the\s+)?user(?:[\x27’]s)?\s+(?:knowledge|awareness|consent|noticing|seeing|knowing|permission)\b'
+      - '\b(?:silently|quietly|secretly|covertly|discreetly)\b[^.\n]{0,20}?\b(?:do|run|execute|perform|send|modify|edit|delete|install|exfiltrat\w*)\b'
+
+  # --- auto-execution ----------------------------------------------------
+  - id: NG-AUTO-001
+    title: 'Download piped directly to a shell'
+    severity: high
+    kind: pattern
+    category: autoexec
+    message: 'A remote download piped straight into a shell/interpreter runs attacker code with no review.'
+    any:
+      - '\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod|fetch)\b[^\n|]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|ash|dash|python3?|node|perl|ruby|pwsh|powershell)\b'
+      - '\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod|curl|wget)\b[^\n|]*\|\s*(?:iex|Invoke-Expression)\b'
+
+  - id: NG-AUTO-002
+    title: 'SessionStart hook in agent settings'
+    severity: medium
+    kind: pattern
+    category: autoexec
+    message: 'A SessionStart hook runs a command automatically whenever the agent starts a session, a persistence foothold.'
+    files:
+      - '**/.claude/**'
+      - '**/.gemini/**'
+    any:
+      - '[\x27"]SessionStart[\x27"]\s*:'
+
+  - id: NG-AUTO-003
+    title: 'VS Code task auto-runs on folder open'
+    severity: high
+    kind: pattern
+    category: autoexec
+    message: 'A tasks.json task with runOn=folderOpen executes automatically when the workspace is opened, with no user action.'
+    files:
+      - '**/.vscode/tasks.json'
+    within: 120
+    all:
+      - '[\x27"]runOn[\x27"]'
+      - '[\x27"]folderOpen[\x27"]'
+
+  # --- permissions -------------------------------------------------------
+  - id: NG-PERM-001
+    title: 'Permission guardrails disabled'
+    severity: high
+    kind: pattern
+    category: permissions
+    message: 'Grants blanket command execution or disables approval prompts (Bash(*), bypassPermissions, --dangerously-skip-permissions, yolo approval mode, danger-full-access).'
+    any:
+      - '\bBash\(\s*\*\s*\)'
+      - '\bbypassPermissions\b'
+      - '--dangerously-skip-permissions\b'
+      - '[\x27"]?approval_?[Mm]ode[\x27"]?\s*[:=]\s*[\x27"]?yolo\b'
+      - '\bdanger[-_]full[-_]access\b'
+      - '[\x27"]defaultMode[\x27"]\s*:\s*[\x27"]bypassPermissions[\x27"]'
+
+  - id: NG-PERM-002
+    title: 'All project MCP servers auto-enabled'
+    severity: medium
+    kind: pattern
+    category: permissions
+    message: 'enableAllProjectMcpServers trusts every MCP server a project declares, including ones an attacker may have added.'
+    any:
+      - '\benableAllProjectMcpServers\b'
+
+  # --- hidden-channel signals (raised by the normaliser) -----------------
+  - id: NG-HID-001
+    title: 'Invisible characters present'
+    severity: medium
+    kind: signal
+    category: hidden
+    signal: invisible_chars
+    message: 'Zero-width or bidirectional control characters can hide text from a human reader while the agent still reads it.'
+
+  - id: NG-HID-002
+    title: 'Unicode tag characters present'
+    severity: high
+    kind: signal
+    category: hidden
+    signal: tag_chars
+    message: 'Unicode tag characters (U+E0000..U+E007F) are invisible and smuggle instructions. They have no legitimate use in a config file.'
+
+  - id: NG-HID-003
+    title: 'Rule matched only in hidden content'
+    severity: high
+    kind: signal
+    category: hidden
+    signal: hidden_instruction
+    message: 'A rule matched content a human reviewer would not see (an HTML comment, tag characters or a base64 blob).'
+
+  # --- integrity (raised by `verify`, documented here) -------------------
+  - id: NG-INT-001
+    title: 'Config file changed since baseline'
+    severity: high
+    kind: integrity
+    category: integrity
+    message: 'An agent config file differs from the recorded baseline.'
+
+  - id: NG-INT-002
+    title: 'New config file since baseline'
+    severity: medium
+    kind: integrity
+    category: integrity
+    message: 'A config file exists that was not present when the baseline was taken.'
+
+  - id: NG-INT-003
+    title: 'Config file removed since baseline'
+    severity: low
+    kind: integrity
+    category: integrity
+    message: 'A config file recorded in the baseline is now missing.'
+
+  - id: NG-MCP-001
+    title: 'MCP server definition changed since baseline'
+    severity: high
+    kind: integrity
+    category: integrity
+    message: 'An MCP server entry was added, removed or changed relative to the baseline.'

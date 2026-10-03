@@ -1,0 +1,4 @@
+# AGENTS.md
+
+Build with `make build`. Run tests with `pytest -q`. Format with `ruff format`.
+Open a pull request against main; keep commits small and descriptive.
