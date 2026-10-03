@@ -1,7 +1,15 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-# nation-guard
+<p align="center">
+  <img src="assets/nation-guard-logo.svg" alt="NATION Guard" width="560">
+</p>
 
-**An experimental, local-first prompt-injection scanner and integrity tool for AI agent instruction/config files.**
+<h1 align="center">NATION Guard</h1>
+
+<p align="center"><strong>Prompt-injection scanner &amp; integrity tool for AI agent instruction/config files.</strong></p>
+
+<p align="center">Local-first · offline · stdlib-only Python (3.9+) · no runtime dependencies · Apache-2.0</p>
+
+---
 
 > ⚠️ **Experimental / pre-1.0 — not security-audited.** This is a heuristic
 > detector, not a sandbox and not guaranteed protection. It catches known
@@ -16,27 +24,36 @@
 > run (see below), and the security fixes have **not been independently
 > verified or audited**. Treat all results here as self-reported.
 
-AI coding agents read files like `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
-`.cursorrules`, `.mcp.json` and `.vscode/tasks.json` as *trusted instructions*.
-That makes those files a perfect place to hide a prompt-injection payload: one
-poisoned `AGENTS.md` can tell every agent that opens the repo to exfiltrate
-secrets, disable its own guardrails, or copy the payload into the next project.
+## What NATION Guard solves
 
-nation-guard scans those files for such payloads, records a baseline so you can
-detect tampering, and can apply **best-effort** file-permission hardening to make
-an accidental or tricked rewrite fail loudly (it is a speed bump and an alarm —
-not a lock against a determined local process; see `harden` below). It is
-**stdlib-only Python** with **no runtime dependencies** and makes **no network
-or subprocess calls**; a CI check (`tools/check_no_network.py`) statically scans
-`guard/` for **known** network/subprocess/dynamic-import constructs — it reduces
-the chance such code slips in, but it is a construct check, not a proof that no
-network behavior is possible.
+AI coding agents — Claude Code, Cursor, Gemini, Copilot and friends — read files
+like `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`, `.mcp.json` and
+`.vscode/tasks.json` as **trusted instructions**. Anyone who can land text in one
+of those files (a pull request, a dependency or template, a copied snippet, a
+document the agent ingests) can tell every agent that opens the repo to
+exfiltrate secrets, disable its own guardrails, auto-run code, or copy the
+payload into the next project — a prompt-injection **worm**.
 
-## 60-second quickstart
+NATION Guard treats those files as the attack surface they are:
+
+- **Scan** them for injection / exfiltration / auto-exec / permission-weakening
+  patterns — seeing through invisible characters, Unicode-tag smuggling,
+  homoglyphs, HTML entities and base64, so a disguised payload is caught the
+  same as a plain one.
+- **Baseline + verify** to catch tampering — changed, new or removed config
+  files and MCP-server changes — even when the wording is novel.
+- **Harden** (best-effort) and **quarantine** suspicious files, reversibly.
+- Plug in as a **Claude Code hook** or a read-only **MCP server**.
+
+<p align="center">
+  <img src="assets/how-it-works.svg" alt="Config files flow into NATION Guard (scan, baseline/verify, harden, quarantine) producing findings, drift alerts and reversible quarantine." width="780">
+</p>
+
+## Quick start
 
 ```bash
-# Python 3.9+; no dependencies to install.
-pip install nation-guard        # or: pip install .
+# Python 3.9+, no dependencies. From a clone of this repo:
+pip install .                   # not yet published to PyPI
 
 # 1. Scan the current project for unsafe/injected instructions.
 nation-guard scan
@@ -75,14 +92,11 @@ nation-guard restore <id>
 | NG-HID-001/2/3| med/high | Invisible chars, Unicode tag smuggling, rule hits in hidden content |
 | NG-INT-001..3, NG-MCP-001 | mixed | Baseline drift (changed/new/removed files, MCP entry changes) |
 
-Payloads are matched through common obfuscations — invisible characters,
-Unicode tag smuggling, homoglyphs, HTML comments/entities and base64 — so a
-disguised instruction is caught the same as a plain one. Run
-`nation-guard rules list` for the full catalogue.
+Run `nation-guard rules list` for the full catalogue.
 
 ## Use it as a Claude Code hook
 
-nation-guard ships a hook that vets edits to config files, warns on injected
+NATION Guard ships a hook that vets edits to config files, warns on injected
 tool output, and blocks worm propagation through sub-agents/outgoing messages:
 
 ```bash
@@ -92,7 +106,7 @@ nation-guard hooks print --block  # deny (instead of ask) on config writes
 
 It **prints** the fragment; it never edits your config for you.
 
-**Enforcement is the host runtime's, not nation-guard's.** The hook emits a
+**Enforcement is the host runtime's, not NATION Guard's.** The hook emits a
 decision (`ask`/`deny`) or a warning on stdout; whether that actually blocks a
 tool call depends entirely on the agent runtime honouring it. The hook fails
 closed on malformed recognised events (returns a protective decision), but how

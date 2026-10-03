@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 260" width="940" height="260" role="img" aria-label="How NATION Guard works">
+  <rect width="940" height="260" rx="18" fill="#0a0d0b"/>
+  <!-- column 1: inputs -->
+  <rect x="24" y="54" width="250" height="152" rx="12" fill="#11150f" stroke="#2a3426"/>
+  <text x="149" y="46" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#9fe870">Agent config files</text>
+  <g font-family="'Courier New', monospace" font-size="16" fill="#c9cdd4">
+    <text x="44" y="88">CLAUDE.md · AGENTS.md</text>
+    <text x="44" y="116">GEMINI.md · .cursorrules</text>
+    <text x="44" y="144">.mcp.json</text>
+    <text x="44" y="172">.claude/ · .vscode/tasks.json</text>
+  </g>
+  <!-- arrow -->
+  <g stroke="#9fe870" stroke-width="3" fill="none">
+    <line x1="286" y1="130" x2="338" y2="130"/>
+    <path d="M330 122 L344 130 L330 138" fill="#9fe870" stroke="none"/>
+  </g>
+  <!-- column 2: NATION Guard -->
+  <rect x="350" y="40" width="250" height="180" rx="12" fill="#0f1a0d" stroke="#9fe870"/>
+  <text x="475" y="74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="#ffffff">NATION Guard</text>
+  <g font-family="'Courier New', monospace" font-size="17" fill="#9fe870">
+    <text x="475" y="110" text-anchor="middle">scan</text>
+    <text x="475" y="138" text-anchor="middle">baseline + verify</text>
+    <text x="475" y="166" text-anchor="middle">harden</text>
+    <text x="475" y="194" text-anchor="middle">quarantine</text>
+  </g>
+  <!-- arrow -->
+  <g stroke="#9fe870" stroke-width="3" fill="none">
+    <line x1="612" y1="130" x2="664" y2="130"/>
+    <path d="M656 122 L670 130 L656 138" fill="#9fe870" stroke="none"/>
+  </g>
+  <!-- column 3: outputs -->
+  <rect x="676" y="54" width="240" height="152" rx="12" fill="#11150f" stroke="#2a3426"/>
+  <text x="796" y="46" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#9fe870">Results</text>
+  <g font-family="'Courier New', monospace" font-size="16" fill="#c9cdd4">
+    <text x="696" y="88">findings</text>
+    <text x="696" y="116">text · JSON · SARIF</text>
+    <text x="696" y="144">drift + MCP changes</text>
+    <text x="696" y="172">reversible quarantine</text>
+  </g>
+  <text x="470" y="244" text-anchor="middle" font-family="'Courier New', monospace" font-size="14" fill="#6b7280">local-first · offline · stdlib-only Python · Apache-2.0</text>
+</svg>
