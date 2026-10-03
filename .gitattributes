@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Force LF for all text files on every platform. The corpus fixtures are
+# compared byte-for-byte against a fresh `generate.py` run (which writes LF),
+# so a CRLF checkout on Windows would otherwise fail tests/test_generate.py.
+* text=auto eol=lf
