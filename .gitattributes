@@ -3,3 +3,11 @@
 # compared byte-for-byte against a fresh `generate.py` run (which writes LF),
 # so a CRLF checkout on Windows would otherwise fail tests/test_generate.py.
 * text=auto eol=lf
+
+# Binary assets — never apply text/EOL normalization.
+*.webp binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.zip binary

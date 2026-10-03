@@ -1,28 +1,15 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <p align="center">
-  <img src="assets/nation-guard-logo.svg" alt="NATION Guard" width="560">
+  <img src="assets/nation-guard-logo.webp" alt="NATION Guard" width="720">
 </p>
 
 <h1 align="center">NATION Guard</h1>
 
 <p align="center"><strong>Prompt-injection scanner &amp; integrity tool for AI agent instruction/config files.</strong></p>
 
-<p align="center">Local-first · offline · stdlib-only Python (3.9+) · no runtime dependencies · Apache-2.0</p>
+<p align="center">Experimental · local-first · offline · stdlib-only Python (3.9+) · Apache-2.0</p>
 
 ---
-
-> ⚠️ **Experimental / pre-1.0 — not security-audited.** This is a heuristic
-> detector, not a sandbox and not guaranteed protection. It catches known
-> prompt-injection, exfiltration and auto-exec techniques plus common
-> obfuscations — it does **not** catch everything, and it has documented false
-> positives. **Read [`docs/known-gaps.md`](docs/known-gaps.md) and
-> [`docs/limits.md`](docs/limits.md) before relying on it.**
->
-> **Verification status (be skeptical):** the test suite's reported result is
-> **122 passing on Windows / CPython 3.12, with 3 symlink tests skipped**.
-> **Linux, macOS and Python 3.9 are not yet verified**, CI does not currently
-> run (see below), and the security fixes have **not been independently
-> verified or audited**. Treat all results here as self-reported.
 
 ## What NATION Guard solves
 
