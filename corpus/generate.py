@@ -44,7 +44,9 @@ def homoglyph(s: str) -> str:
 
 
 def _write(name: str, text: str) -> None:
-    (MAL / name).write_text(text, encoding="utf-8", newline="\n")
+    # open(..., newline="\n") works on 3.9; Path.write_text(newline=...) is 3.10+.
+    with open(MAL / name, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
 
 
 def build() -> None:

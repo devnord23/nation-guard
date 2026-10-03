@@ -12,6 +12,11 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+# Cap structured-config parsing so a pathologically large JSONC file cannot make
+# the comment/trailing-comma passes do unbounded work. Config files this tool
+# cares about are tiny; anything larger is treated as unparseable.
+MAX_BYTES = 5 * 1024 * 1024
+
 
 def _strip(text: str) -> str:
     out = []
@@ -94,7 +99,10 @@ def _drop_trailing_commas(text: str) -> str:
 
 
 def loads(text: str) -> Optional[Any]:
-    """Parse JSONC text, or return ``None`` if it cannot be parsed."""
+    """Parse JSONC text, or return ``None`` if it cannot be parsed (or is too
+    large — see :data:`MAX_BYTES`)."""
+    if text is None or len(text) > MAX_BYTES:
+        return None
     for candidate in (text, _drop_trailing_commas(_strip(text))):
         try:
             return json.loads(candidate)

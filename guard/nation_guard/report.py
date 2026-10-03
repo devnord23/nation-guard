@@ -34,7 +34,7 @@ def _by_severity(findings: Sequence[Finding]) -> Dict[str, int]:
 
 
 def render_text(findings: Sequence[Finding], *, root: str = "", files_scanned: int = 0,
-                use_color: bool = False) -> str:
+                use_color: bool = False, truncated: Sequence[str] = ()) -> str:
     lines: List[str] = []
     if root:
         lines.append("nation-guard %s  —  %s" % (__version__, root))
@@ -42,6 +42,10 @@ def render_text(findings: Sequence[Finding], *, root: str = "", files_scanned: i
     summary = ", ".join("%d %s" % (counts[s], s) for s in ("critical", "high", "medium", "low", "info") if counts.get(s))
     lines.append("Scanned %d file(s); %d finding(s)%s" % (
         files_scanned, len(findings), (": " + summary) if summary else ""))
+    if truncated:
+        lines.append("WARNING: %d file(s) exceeded the 2 MiB scan limit and were scanned only "
+                     "in part (integrity hashing still covers them in full): %s"
+                     % (len(truncated), ", ".join(sorted(truncated))))
     lines.append("")
     if not findings:
         lines.append("No findings.")
@@ -74,16 +78,18 @@ def _color(sev: str, use_color: bool) -> str:
     return label
 
 
-def render_json(findings: Sequence[Finding], *, root: str = "", files_scanned: int = 0) -> str:
+def render_json(findings: Sequence[Finding], *, root: str = "", files_scanned: int = 0,
+                truncated: Sequence[str] = ()) -> str:
     payload = {
         "tool": TOOL_NAME,
         "version": __version__,
         "root": root,
         "files_scanned": files_scanned,
+        "truncated": sorted(truncated),
         "summary": _by_severity(findings),
         "findings": [f.to_dict() for f in findings],
     }
-    return json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+    return json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=True)
 
 
 def render_sarif(findings: Sequence[Finding], rules: Sequence[Rule], *, root: str = "") -> str:
@@ -138,7 +144,9 @@ def render_sarif(findings: Sequence[Finding], rules: Sequence[Rule], *, root: st
             **({"originalUriBaseIds": {"SRCROOT": {"uri": _as_file_uri(root)}}} if root else {}),
         }],
     }
-    return json.dumps(sarif, indent=2, ensure_ascii=False, sort_keys=True)
+    # ensure_ascii escapes any lone surrogate / non-BMP char, so serialising a
+    # finding drawn from hostile bytes cannot raise on the final UTF-8 encode.
+    return json.dumps(sarif, indent=2, ensure_ascii=True, sort_keys=True)
 
 
 def _as_file_uri(root: str) -> str:

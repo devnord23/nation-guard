@@ -62,8 +62,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Scan the repo (corpus fixtures are not config-named, so excluded)
-        run: python -m nation_guard.cli scan --root . --format sarif --fail-on high > nation-guard.sarif || true
+        # Real gate: fails the job if the repo's own agent config files contain
+        # a finding at/above high. (No `|| true`.)
+        run: python -m nation_guard.cli scan --root . --format sarif --fail-on high > nation-guard.sarif
         env:
           PYTHONPATH: guard
       - name: Show report
+        if: always()
         run: cat nation-guard.sarif

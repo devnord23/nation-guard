@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Quarantine: pull a malicious file out of the project, reversibly.
+"""Quarantine: pull a malicious file out of the project, reversibly and safely.
 
-``capture`` moves (or, with ``keep``, copies) a file into the state home under
-its own id, records a SHA-256 and the original mode, and leaves the payload
-read-only (``0400``). ``restore`` puts it back, but refuses to clobber an
-existing file unless forced and refuses outright if the quarantined bytes no
-longer match the recorded hash (tamper check).
+``capture`` copies the file into the state home under a fixed internal name
+(``payload``, never the original filename, so a source called ``meta.json``
+cannot clobber our metadata), verifies the saved bytes against a SHA-256
+*before* removing the original, and records the original mode. ``restore``
+refuses to write through a symlink at the destination (or its parent), writes
+exclusively via a temp file + atomic replace, will not clobber an existing file
+without ``force``, and never changes the permissions of an existing directory.
 """
 from __future__ import annotations
 
@@ -13,12 +15,16 @@ import hashlib
 import os
 import shutil
 import stat
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 from . import state
+
+PAYLOAD_NAME = "payload"   # fixed; independent of the original filename
+META_NAME = "meta.json"
 
 
 @dataclass
@@ -30,7 +36,7 @@ class QuarantineItem:
     size: int
     mode: int
     captured: str
-    payload_name: str
+    original_name: str
 
     @property
     def dir(self) -> Path:
@@ -38,7 +44,7 @@ class QuarantineItem:
 
     @property
     def payload(self) -> Path:
-        return self.dir / self.payload_name
+        return self.dir / PAYLOAD_NAME
 
 
 def _sha256_file(path: Path) -> str:
@@ -59,6 +65,20 @@ def _make_id(rel: str, content_sha: str) -> str:
     return candidate
 
 
+def _remove(path: Path) -> None:
+    """Remove ``path``. If it is a symlink, unlink the link only — never chmod
+    or delete its (possibly external) target."""
+    p = str(path)
+    if os.path.islink(p):
+        os.remove(p)
+        return
+    try:
+        state.make_writable(path)
+    except OSError:
+        pass
+    os.remove(p)
+
+
 def capture(path: Path, root: Path, keep: bool = False) -> QuarantineItem:
     path = Path(path)
     if not path.is_file():
@@ -74,37 +94,39 @@ def capture(path: Path, root: Path, keep: bool = False) -> QuarantineItem:
     dest_dir = state.quarantine_dir() / qid
     state.secure_mkdir(dest_dir)
 
-    payload_name = path.name or "payload"
-    payload = dest_dir / payload_name
+    payload = dest_dir / PAYLOAD_NAME
     shutil.copy2(str(path), str(payload))
+
+    # Verify the saved bytes BEFORE touching the original, so a failed copy can
+    # never lose data.
+    if _sha256_file(payload) != content_sha:
+        try:
+            os.chmod(str(payload), 0o600)
+            payload.unlink()
+        except OSError:
+            pass
+        raise state.StateError(
+            "quarantine copy of %s failed verification; original left untouched" % rel)
 
     item = QuarantineItem(
         id=qid,
-        original_path=str(path.resolve()),
+        original_path=os.path.abspath(str(path)),  # literal location (no symlink follow)
         rel=rel,
         sha256=content_sha,
         size=st.st_size,
         mode=stat.S_IMODE(st.st_mode),
         captured=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        payload_name=payload_name,
+        original_name=path.name or PAYLOAD_NAME,
     )
-    state.write_json_atomic(dest_dir / "meta.json", _to_meta(item))
+    state.write_json_atomic(dest_dir / META_NAME, _to_meta(item))
     try:
-        os.chmod(payload, 0o400)
+        os.chmod(str(payload), 0o400)
     except (OSError, NotImplementedError):
         pass
 
     if not keep:
         _remove(path)
     return item
-
-
-def _remove(path: Path) -> None:
-    try:
-        state.make_writable(path)
-    except OSError:
-        pass
-    os.remove(path)
 
 
 def _to_meta(item: QuarantineItem) -> dict:
@@ -116,7 +138,7 @@ def _to_meta(item: QuarantineItem) -> dict:
         "size": item.size,
         "mode": item.mode,
         "captured": item.captured,
-        "payload_name": item.payload_name,
+        "original_name": item.original_name,
     }
 
 
@@ -130,14 +152,14 @@ def _from_meta(meta: dict) -> Optional[QuarantineItem]:
             size=int(meta.get("size", 0)),
             mode=int(meta.get("mode", 0o600)),
             captured=str(meta.get("captured", "")),
-            payload_name=str(meta.get("payload_name", "payload")),
+            original_name=str(meta.get("original_name", PAYLOAD_NAME)),
         )
     except (KeyError, ValueError, TypeError):
         return None
 
 
 def load_item(qid: str) -> Optional[QuarantineItem]:
-    meta = state.read_json(state.quarantine_dir() / qid / "meta.json")
+    meta = state.read_json(state.quarantine_dir() / qid / META_NAME)
     if not isinstance(meta, dict):
         return None
     return _from_meta(meta)
@@ -167,14 +189,36 @@ def restore(qid: str, force: bool = False) -> Path:
         raise state.StateError("quarantine payload for %r fails its hash check; refusing to restore" % qid)
 
     target = Path(item.original_path)
+    # Reject unsafe symlink destinations BEFORE touching anything: a planted
+    # (possibly dangling) symlink at the destination or its parent would
+    # otherwise let a restore write a file outside the intended location.
+    if os.path.islink(str(target)):
+        raise state.StateError("restore destination %s is a symlink; refusing (unsafe)" % target)
     if target.exists() and not force:
         raise state.StateError("%s already exists; pass --force to overwrite" % target)
-    state.secure_mkdir(target.parent)
-    if target.exists():
-        _remove(target)
-    shutil.copy2(str(item.payload), str(target))
+
+    parent = target.parent
+    if os.path.islink(str(parent)):
+        raise state.StateError("restore destination parent %s is a symlink; refusing" % parent)
+    if not parent.exists():
+        # Create missing parents only; never change the mode of an existing dir.
+        parent.mkdir(parents=True, exist_ok=True)
+
+    # Exclusive write: temp file in the parent, then atomic replace of the NAME
+    # (os.replace does not follow a symlink target — and we refused symlinks).
+    fd, tmp = tempfile.mkstemp(prefix=".ngrestore-", dir=str(parent))
     try:
-        os.chmod(target, item.mode)
+        with os.fdopen(fd, "wb") as out, open(item.payload, "rb") as src:
+            shutil.copyfileobj(src, out)
+        os.replace(tmp, str(target))
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+    try:
+        os.chmod(str(target), item.mode)
     except (OSError, NotImplementedError):
         pass
     return target

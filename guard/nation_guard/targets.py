@@ -67,6 +67,23 @@ MAX_FILES = 20000
 MAX_DEPTH = 16
 
 
+def real_within(path, root) -> bool:
+    """True if ``path``'s real (symlink-resolved) location is inside ``root``.
+
+    Used to enforce containment everywhere we touch a file: a config file that
+    is a symlink pointing outside the scanned root must not be read, frozen, or
+    written through. ``os.path.realpath`` resolves every symlink component, and
+    we compare with ``normcase`` so the check holds on case-insensitive
+    filesystems too.
+    """
+    try:
+        rp = os.path.normcase(os.path.realpath(str(path)))
+        rr = os.path.normcase(os.path.realpath(str(root)))
+    except OSError:
+        return False
+    return rp == rr or rp.startswith(rr + os.sep)
+
+
 def _match(rel: str, pattern: str) -> bool:
     # Case-insensitive: Windows and macOS filesystems are, and agents there
     # load "claude.md" as readily as "CLAUDE.md".
@@ -98,9 +115,17 @@ def is_config_path(path: str) -> bool:
     return False
 
 
-def iter_config_files(root: Path) -> Iterator[Path]:
-    """Yield agent config files under ``root`` (no symlinked directories)."""
+def iter_config_files(root: Path, classify_root: Optional[Path] = None) -> Iterator[Path]:
+    """Yield agent config files found by walking ``root``.
+
+    Config-ness is decided by each file's *logical* path relative to
+    ``classify_root`` (default: ``root``) so that scanning a subtree such as
+    ``.vscode`` still recognises ``.vscode/tasks.json`` and so a symlink alias
+    cannot change a file's logical identity to dodge a filename-scoped rule.
+    Containment is enforced separately against the real (symlink-resolved) path.
+    """
     root = root.resolve()
+    croot = Path(classify_root).resolve() if classify_root is not None else root
     seen = 0
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         rel_dir = Path(dirpath).relative_to(root)
@@ -113,25 +138,52 @@ def iter_config_files(root: Path) -> Iterator[Path]:
             seen += 1
             if seen > MAX_FILES:
                 return
-            rel = (rel_dir / name).as_posix()
-            if is_config_relpath(rel):
-                yield Path(dirpath) / name
+            full = Path(dirpath) / name
+            crel = lexical_relpath(full, croot)          # logical identity
+            if not is_config_relpath(crel):
+                continue
+            # Containment: skip a config file whose real path (resolving every
+            # symlink component) leaves the classify root, so a planted link
+            # cannot make us read/freeze content elsewhere on the machine.
+            if not real_within(full, croot):
+                continue
+            yield full
+
+
+def lexical_relpath(path, root) -> str:
+    """Relative POSIX path computed lexically — WITHOUT resolving symlinks, so a
+    file's logical identity (used for filename-scoped rules) is preserved."""
+    try:
+        return Path(os.path.relpath(str(path), str(root))).as_posix()
+    except ValueError:
+        return Path(str(path)).as_posix()
 
 
 def relpath(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
-        return path.as_posix()
+        return lexical_relpath(path, root)
+
+
+def read_text_sized(path: Path):
+    """Read up to MAX_FILE_BYTES for scanning; return (text, truncated).
+
+    This cap applies to *content scanning* only — integrity hashing reads the
+    whole file (see ``integrity.py``) so changes appended past the cap are
+    still detected.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read(MAX_FILE_BYTES + 1)
+    truncated = len(data) > MAX_FILE_BYTES
+    if truncated:
+        data = data[:MAX_FILE_BYTES]
+    return data.decode("utf-8", errors="replace"), truncated
 
 
 def read_text(path: Path) -> str:
     """Read up to MAX_FILE_BYTES; undecodable bytes become U+FFFD."""
-    with open(path, "rb") as fh:
-        data = fh.read(MAX_FILE_BYTES + 1)
-    if len(data) > MAX_FILE_BYTES:
-        data = data[:MAX_FILE_BYTES]
-    return data.decode("utf-8", errors="replace")
+    return read_text_sized(path)[0]
 
 
 def mcp_key_for(rel: str) -> str:

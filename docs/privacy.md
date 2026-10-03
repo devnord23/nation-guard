@@ -7,10 +7,14 @@ nation-guard is designed to be boring about your data: it stays on your machine.
 
 The scanning/rules/hook/MCP code performs **no** network I/O. There is no
 telemetry, no update check, no "phone home", and no third-party runtime
-dependency that could add one. This is enforced, not just promised:
-`tools/check_no_network.py` statically rejects any import of `socket`, `ssl`,
-`urllib`, `http`, `requests`, `subprocess`, `asyncio`, `ctypes`, etc. under
-`guard/`, and it runs in CI on every push.
+dependency that could add one. As a guardrail against such code slipping in,
+`tools/check_no_network.py` statically scans `guard/` for **known** constructs —
+imports of `socket`, `ssl`, `urllib`, `http`, `requests`, `subprocess`,
+`asyncio`, `ctypes`, `importlib`, etc., and `eval`/`exec`/`import_module` calls —
+and runs in CI on every push. It is a construct check over the known surface,
+not a proof that no network behavior is possible (e.g. it does not model
+`getattr`-built names or C extensions); treat it as defense-in-depth alongside
+reading the code, which is deliberately small.
 
 ## What is read
 

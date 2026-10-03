@@ -62,7 +62,7 @@ rules:
     within: 240
     all:
       - '(?:\.ssh\b|\.aws[\\/]credentials|(?<![A-Za-z0-9_])\.env(?!\.(?:example|sample|template))(?![\w-])|\bwallet\.dat\b|\bseed\s+phrase\b|\bmnemonic\b|\bprivate[ _-]?key\b|\bid_rsa\b|\bid_ed25519\b)'
-      - '(?:\bcurl\b[^\n|;]*?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]*--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]*?\$\([^)]+\)|https?://\S*\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|[A-Za-z0-9.-]+\.(?:invalid|com|net|io|sh|dev|xyz)\b|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
+      - '(?:\bcurl\b[^\n|;]{0,200}?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]{0,200}--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]{0,200}-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]{0,200}?\$\([^)]+\)|https?://\S{0,200}\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|[A-Za-z0-9.-]+\.(?:invalid|com|net|io|sh|dev|xyz)\b|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
 
   - id: NG-EXF-002
     title: 'Named secret near a data-sending command'
@@ -73,7 +73,7 @@ rules:
     within: 160
     all:
       - '(?:\bAPI[ _-]?keys?\b|\b[A-Z][A-Z0-9]*_TOKEN\b|\bprocess\.env(?:\.[A-Za-z_][\w]*|\[[\x27"][^\x27"]+[\x27"]\])?|\bsecret[ _-]?keys?\b|\baccess[ _-]?tokens?\b|\bbearer\s+token\b|\b(?:OPENAI|ANTHROPIC|AWS|GITHUB|GITLAB|SLACK|STRIPE)_[A-Z0-9_]*(?:KEY|TOKEN|SECRET)\b)'
-      - '(?:\bcurl\b[^\n|;]*?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]*--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]*?\$\([^)]+\)|https?://\S*\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
+      - '(?:\bcurl\b[^\n|;]{0,200}?(?:-d\b|--data\b|-F\b|--form\b|-T\b|--upload-file\b|-X\s*POST|--request\s+POST)|\bwget\b[^\n]{0,200}--post|\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]{0,200}-(?:Method\s+Post|Body)\b|\brequests\.post\b|\bfetch\(\s*[^)]*method\s*[:=]\s*[\x27"]POST|\bnc\b\s+\S+\s+\d+|(?:\bcurl\b|\bwget\b|\bfetch\b|\biwr\b|\birm\b|\bnc\b)[^\n]{0,200}?\$\([^)]+\)|https?://\S{0,200}\$\([^)]+\)|\b(?:send|upload|exfiltrat\w*|post|transmit|ship|leak|forward|relay)\b[^\n]{0,50}?\b(?:to|->)\b[^\n]{0,80}?(?:https?://|webhook|\bendpoint\b|attacker|\$\{?[A-Za-z_]*(?:URL|HOOK|ENDPOINT)))'
 
   # --- concealment -------------------------------------------------------
   - id: NG-CON-001
@@ -96,8 +96,8 @@ rules:
     category: autoexec
     message: 'A remote download piped straight into a shell/interpreter runs attacker code with no review.'
     any:
-      - '\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod|fetch)\b[^\n|]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|ash|dash|python3?|node|perl|ruby|pwsh|powershell)\b'
-      - '\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod|curl|wget)\b[^\n|]*\|\s*(?:iex|Invoke-Expression)\b'
+      - '\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod|fetch)\b[^\n|]{0,400}\|\s*(?:sudo\s+)?(?:sh|bash|zsh|ash|dash|python3?|node|perl|ruby|pwsh|powershell)\b'
+      - '\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod|curl|wget)\b[^\n|]{0,400}\|\s*(?:iex|Invoke-Expression)\b'
 
   - id: NG-AUTO-002
     title: 'SessionStart hook in agent settings'

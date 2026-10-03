@@ -82,28 +82,52 @@ def _summary(findings: Sequence[Finding], limit: int = 5) -> str:
     return "; ".join(parts)
 
 
-def _target_and_content(tool_name: str, tool_input: dict) -> Tuple[List[str], str]:
-    """Return (candidate config paths touched, text to scan)."""
+def _extract_write(tool_name: str, tool_input):
+    """Validate a recognised write event and extract (ok, paths, content).
+
+    ``ok`` is False when a *recognised* tool's input is malformed or missing a
+    required field — the caller then returns a protective decision rather than
+    silently continuing. A well-formed event that simply does not touch a
+    config file returns ok=True with an empty ``paths`` (normal flow).
+    """
     if not isinstance(tool_input, dict):
-        return [], ""
+        return False, [], ""
+
+    def _fp(key="file_path"):
+        v = tool_input.get(key)
+        return v if isinstance(v, str) and v else None
+
     if tool_name == "Write":
-        path = tool_input.get("file_path") or ""
-        return _paths_if_config([path]), str(tool_input.get("content") or "")
+        fp = _fp()
+        if fp is None:
+            return False, [], ""
+        content = tool_input.get("content")
+        return True, _paths_if_config([fp]), content if isinstance(content, str) else ""
     if tool_name == "Edit":
-        path = tool_input.get("file_path") or ""
-        return _paths_if_config([path]), str(tool_input.get("new_string") or "")
+        fp = _fp()
+        if fp is None:
+            return False, [], ""
+        ns = tool_input.get("new_string")
+        return True, _paths_if_config([fp]), ns if isinstance(ns, str) else ""
     if tool_name == "MultiEdit":
-        path = tool_input.get("file_path") or ""
-        edits = tool_input.get("edits") or []
+        fp = _fp()
+        edits = tool_input.get("edits")
+        if fp is None or not isinstance(edits, list):
+            return False, [], ""
         text = "\n".join(str(e.get("new_string") or "") for e in edits if isinstance(e, dict))
-        return _paths_if_config([path]), text
+        return True, _paths_if_config([fp]), text
     if tool_name == "NotebookEdit":
-        path = tool_input.get("notebook_path") or tool_input.get("file_path") or ""
-        return _paths_if_config([path]), str(tool_input.get("new_source") or "")
+        fp = _fp("notebook_path") or _fp("file_path")
+        if fp is None:
+            return False, [], ""
+        src = tool_input.get("new_source")
+        return True, _paths_if_config([fp]), src if isinstance(src, str) else ""
     if tool_name == "Bash":
-        command = str(tool_input.get("command") or "")
-        return _bash_config_targets(command), command
-    return [], ""
+        command = tool_input.get("command")
+        if not isinstance(command, str):
+            return False, [], ""
+        return True, _bash_config_targets(command), command
+    return False, [], ""
 
 
 def _paths_if_config(paths: Sequence[str]) -> List[str]:
@@ -142,12 +166,20 @@ def run_write(event: Optional[dict], block: bool, rules: Sequence[Rule]) -> int:
         return _emit(_pre("deny", "nation-guard: could not parse hook input; failing closed"))
     tool_name = str(event.get("tool_name") or "")
     if tool_name not in WRITE_TOOLS:
-        return 0  # not our business; defer to normal flow
-    paths, content = _target_and_content(tool_name, event.get("tool_input") or {})
+        return 0  # unrelated tool; defer to normal flow
+    try:
+        ok, paths, content = _extract_write(tool_name, event.get("tool_input"))
+    except Exception:
+        ok, paths, content = False, [], ""
+    if not ok:
+        # A recognised write event we cannot parse must not slip through.
+        return _emit(_pre(decision, "nation-guard: %s event has malformed or missing input; failing closed" % tool_name))
     if not paths:
-        return 0  # not touching a config file
-    rel = paths[0]
-    findings = scan_text(content, rel, rules)
+        return 0  # well-formed and not touching a config file
+    try:
+        findings = scan_text(content, paths[0], rules)
+    except Exception as exc:
+        return _emit(_pre(decision, "nation-guard: could not vet %s change (%s); failing closed" % (tool_name, exc)))
     where = ", ".join(sorted(set(paths)))
     if findings:
         reason = "nation-guard: proposed change to %s matches %s" % (where, _summary(findings))
@@ -176,9 +208,16 @@ def run_outbound(event: Optional[dict], rules: Sequence[Rule]) -> int:
         return _emit(_pre("deny", "nation-guard: could not parse hook input; failing closed"))
     tool_name = str(event.get("tool_name") or "")
     if not (tool_name in OUTBOUND_TOOLS or tool_name.startswith("mcp__")):
-        return 0
-    text = _collect_text(event.get("tool_input"))
-    findings = scan_text(text, "outbound:" + tool_name, rules)
+        return 0  # unrelated tool; defer to normal flow
+    ti = event.get("tool_input")
+    if ti is None or not isinstance(ti, (dict, list, str)):
+        # A recognised outbound event we cannot read must not slip through.
+        return _emit(_pre("deny", "nation-guard: %s event has malformed or missing input; failing closed" % tool_name))
+    try:
+        text = _collect_text(ti)
+        findings = scan_text(text, "outbound:" + tool_name, rules)
+    except Exception as exc:
+        return _emit(_pre("deny", "nation-guard: could not vet %s payload (%s); failing closed" % (tool_name, exc)))
     if not findings:
         return 0
     reason = "nation-guard: %s payload matches %s; blocking outbound propagation" % (tool_name, _summary(findings))
@@ -206,11 +245,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _emit(_post("nation-guard: rules failed to load (%s); cannot vet output." % exc))
         return _emit(_pre("deny", "nation-guard: rules failed to load (%s); failing closed" % exc))
 
-    if mode == "write":
-        return run_write(event, block, rules)
-    if mode == "read":
-        return run_read(event, rules)
-    return run_outbound(event, rules)
+    # Any unexpected handler failure must still produce an explicit protective
+    # decision (deny) for write/outbound, and a cautionary note for read —
+    # never a silent allow.
+    try:
+        if mode == "write":
+            return run_write(event, block, rules)
+        if mode == "read":
+            return run_read(event, rules)
+        return run_outbound(event, rules)
+    except Exception as exc:
+        if mode == "read":
+            return _emit(_post("nation-guard: internal error vetting output (%s); treat with caution." % exc))
+        return _emit(_pre("deny", "nation-guard: internal error (%s); failing closed" % exc))
 
 
 if __name__ == "__main__":

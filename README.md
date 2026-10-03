@@ -16,10 +16,14 @@ poisoned `AGENTS.md` can tell every agent that opens the repo to exfiltrate
 secrets, disable its own guardrails, or copy the payload into the next project.
 
 nation-guard scans those files for such payloads, records a baseline so you can
-detect tampering, and can freeze the files so a worm cannot rewrite them. It is
+detect tampering, and can apply **best-effort** file-permission hardening to make
+an accidental or tricked rewrite fail loudly (it is a speed bump and an alarm —
+not a lock against a determined local process; see `harden` below). It is
 **stdlib-only Python** with **no runtime dependencies** and makes **no network
-or subprocess calls** — you can read the whole thing in one sitting, and a CI
-check (`tools/check_no_network.py`) proves it stays that way.
+or subprocess calls**; a CI check (`tools/check_no_network.py`) statically scans
+`guard/` for **known** network/subprocess/dynamic-import constructs — it reduces
+the chance such code slips in, but it is a construct check, not a proof that no
+network behavior is possible.
 
 ## 60-second quickstart
 
@@ -34,7 +38,7 @@ nation-guard scan
 nation-guard baseline
 nation-guard verify
 
-# 3. Freeze instruction files so a worm can't rewrite them (dry-run first).
+# 3. Best-effort freeze of instruction files (advisory; dry-run first).
 nation-guard harden            # shows what it would do
 nation-guard harden --apply    # drop write bits + pre-create read-only stubs
 nation-guard harden --undo     # revert exactly what it changed
@@ -81,6 +85,16 @@ nation-guard hooks print --block  # deny (instead of ask) on config writes
 
 It **prints** the fragment; it never edits your config for you.
 
+**Enforcement is the host runtime's, not nation-guard's.** The hook emits a
+decision (`ask`/`deny`) or a warning on stdout; whether that actually blocks a
+tool call depends entirely on the agent runtime honouring it. The hook fails
+closed on malformed recognised events (returns a protective decision), but how
+the runtime treats a hook that errors, exits non-zero, or exceeds its timeout
+is runtime-defined — for Claude Code, a `PreToolUse` hook that does not return
+a decision falls back to the normal permission flow, so a hard crash or timeout
+is **not** guaranteed to block. Keep hook commands fast and prefer `--block`
+where a hard denial matters.
+
 ## Use it as an MCP server
 
 A read-only MCP stdio server exposes `scan`, `check_integrity` and
@@ -108,7 +122,7 @@ No dependencies to install for development (Python 3.9+). Exact commands:
 # Run the full test suite (94 tests).
 python -m unittest discover -s tests -p "test_*.py" -v
 
-# Prove the tool makes no network/subprocess/dynamic-exec calls.
+# Static check for known network/subprocess/dynamic-import constructs in guard/.
 python tools/check_no_network.py
 
 # Regenerate the obfuscated corpus fixtures (must produce no diff).

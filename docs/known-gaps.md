@@ -47,24 +47,53 @@ Tune with `--fail-on`; the default gate is `high`.
   the `verifier` component in [`roadmap.md`](roadmap.md) is not started.
 - **`payguard`** (financial/agentic-payment safety) is roadmap-only.
 
-## Verification / build caveats
+## Verification / build evidence
 
-- The full test suite (94 tests) and `tools/check_no_network.py` pass on the
-  development machine (Windows, CPython 3.12).
-- The wheel build + install path is exercised by the CI `package` job; it was
-  not built locally because `setuptools` is not installed in the dev
-  interpreter. The install layout (engine module `nation_guard.rules` vs the
-  init-less `nation_guard/rules/` data dir) was validated by simulating the
-  co-located layout and loading rules from it.
-- SARIF output conforms to 2.1.0 structurally (tool driver, rules, results,
-  levels); it has not been validated against the full JSON Schema or uploaded to
-  a live code-scanning dashboard.
+Checks actually executed (recorded here as evidence rather than intention):
+
+- **Tests:** the full `unittest` suite and `tools/check_no_network.py` pass on
+  the development machine (Windows 11, CPython 3.12.10). See the project reports
+  for the exact count.
+- **Real wheel + sdist build:** `python -m build` produced
+  `nation_guard-0.1.0-py3-none-any.whl` and `.tar.gz` on Windows/3.12. The wheel
+  was confirmed to bundle `nation_guard/rules/core.yaml` (and no
+  `rules/__init__.py`, so the engine module `nation_guard.rules` is not shadowed
+  by the data dir).
+- **Clean-environment install:** the wheel was installed into a fresh
+  virtualenv (wheel only, no source checkout on the path) and, run from an
+  unrelated working directory, loaded its **18** bundled rules from the
+  installed package and resolved the `nation-guard`, `nation-guard-hook` and
+  `nation-guard-mcp` entry points.
+- **Still pending (not yet executed anywhere):** the cross-platform matrix —
+  Linux, macOS, and **Python 3.9** specifically. The dev machine is Windows with
+  only CPython 3.12, so those combinations are unverified. GitHub Actions runs
+  for the private repo currently end in `startup_failure` with **0 jobs**; the
+  workflow YAML parses and is registered *active*, so the cause is not the
+  workflow file. The root cause is **not yet confirmed** (candidates include
+  hosted-runner availability/policy for private repos on the account) and is
+  **not** asserted to be billing without evidence.
+- **SARIF:** output conforms to 2.1.0 structurally (tool driver, rules,
+  results, levels) and is emitted with `ensure_ascii` so hostile bytes cannot
+  break serialization; it has not been validated against the full JSON Schema
+  or uploaded to a live code-scanning dashboard.
 
 ## Resolved during review (for the record)
 
-An adversarial multi-agent review raised five issues, all fixed with
-regression tests before release: the `$(…)` over-broad exfil match, curly-
-apostrophe evasion, HTML-entity-before-strip ordering, an MCP crash on
-non-object params, and an `importlib` gap in the offline check. A self-found
-`O(n²)` proximity matcher was replaced with binary search, and `NG-WORM-001`
-was tightened to require verb + object + destination.
+A first adversarial review raised five issues, all fixed with regression tests:
+the `$(…)` over-broad exfil match, curly-apostrophe evasion,
+HTML-entity-before-strip ordering, an MCP crash on non-object params, and an
+`importlib` gap in the offline check. A self-found `O(n²)` proximity matcher was
+replaced with binary search, and `NG-WORM-001` was tightened to require
+verb + object + destination.
+
+A second review hardened: symlink containment across traversal / harden /
+quarantine / restore (reject links for mutation, no-follow exclusive writes,
+real-path containment); quarantine payload/metadata separation with
+verify-before-delete; full-file integrity hashing (independent of the 2 MiB
+content-scan cap, which is now reported); bounded/forward-only matching for
+repeated-token and unclosed-comment inputs; MCP subpath/alias handling and
+surrogate-safe serialization; harden journaling + identity-bound undo; explicit
+hook schema validation with protective decisions on malformed recognised
+events; a genuine raw detection view with source-accurate line numbers; sdist
+inclusion of tests/corpus/tools; a Python-3.9-safe generator; and removal of the
+CI self-scan's unconditional success.

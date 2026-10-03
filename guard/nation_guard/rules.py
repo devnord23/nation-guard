@@ -249,7 +249,10 @@ def scan_text(text: str, rel: str, rules: Sequence[Rule], norm: Optional[Normali
                 if view_name not in existing.views:
                     existing.views.append(view_name)
                 continue
-            line = view_text.count("\n", 0, m.start()) + 1 if view_name == "text" else None
+            # Only the raw view yields a line number; other views are
+            # transformed (decoded/folded/stripped) and their offsets do not
+            # map back to a real line in the original source.
+            line = view_text.count("\n", 0, m.start()) + 1 if view_name == "raw" else None
             start = max(0, m.start() - 20)
             findings[rule.id] = Finding(rule.id, rule.severity, rule.title, rule.message, rel,
                                         line=line, evidence=sanitize(view_text[start:m.end() + 20]),

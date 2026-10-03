@@ -84,14 +84,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _print_findings(findings: Sequence[Finding], fmt: str, root: str, files_scanned: int,
-                    rules, no_color: bool) -> None:
+                    rules, no_color: bool, truncated: Sequence[str] = ()) -> None:
     if fmt == "json":
-        sys.stdout.write(report.render_json(findings, root=root, files_scanned=files_scanned) + "\n")
+        sys.stdout.write(report.render_json(findings, root=root, files_scanned=files_scanned,
+                                            truncated=truncated) + "\n")
     elif fmt == "sarif":
         sys.stdout.write(report.render_sarif(findings, rules, root=root) + "\n")
     else:
         use_color = (not no_color) and sys.stdout.isatty()
-        sys.stdout.write(report.render_text(findings, root=root, files_scanned=files_scanned, use_color=use_color))
+        sys.stdout.write(report.render_text(findings, root=root, files_scanned=files_scanned,
+                                            use_color=use_color, truncated=truncated))
 
 
 def _fail(findings: Sequence[Finding], fail_on: str) -> int:
@@ -104,7 +106,8 @@ def cmd_scan(args) -> int:
     root = Path(args.root).resolve()
     rules = load_rules()
     result = scan_root(root, rules)
-    _print_findings(result.findings, args.format, str(root), len(result.files_scanned), rules, args.no_color)
+    _print_findings(result.findings, args.format, str(root), len(result.files_scanned), rules,
+                    args.no_color, truncated=result.truncated)
     return _fail(result.findings, args.fail_on)
 
 

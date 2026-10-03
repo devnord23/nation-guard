@@ -21,6 +21,7 @@ class ScanResult:
     findings: List[Finding] = field(default_factory=list)
     files_scanned: List[str] = field(default_factory=list)
     skipped: List[str] = field(default_factory=list)
+    truncated: List[str] = field(default_factory=list)
 
     @property
     def count(self) -> int:
@@ -43,17 +44,31 @@ def scan_file(path: Path, rel: str, rules: Optional[Sequence[Rule]] = None) -> L
 
 def scan_root(root: Path, rules: Optional[Sequence[Rule]] = None) -> ScanResult:
     """Scan every agent config file under ``root``."""
-    root = Path(root).resolve()
+    return scan_under(root, root, rules)
+
+
+def scan_under(walk_root: Path, rel_root: Path, rules: Optional[Sequence[Rule]] = None) -> ScanResult:
+    """Scan config files under ``walk_root``, but classify and report each file
+    by its logical path relative to ``rel_root``.
+
+    This lets an MCP ``scan`` of a subpath (e.g. ``.vscode``) keep the full
+    logical identity (``.vscode/tasks.json``) so filename-scoped rules still
+    apply, while containment is checked against ``rel_root``.
+    """
+    walk_root = Path(walk_root).resolve()
+    rel_root = Path(rel_root).resolve()
     rules = _rules(rules)
-    result = ScanResult(root=root)
-    for path in targets.iter_config_files(root):
-        rel = targets.relpath(path, root)
+    result = ScanResult(root=rel_root)
+    for path in targets.iter_config_files(walk_root, classify_root=rel_root):
+        rel = targets.lexical_relpath(path, rel_root)
         try:
-            text = targets.read_text(path)
+            text, truncated = targets.read_text_sized(path)
         except OSError:
             result.skipped.append(rel)
             continue
         result.files_scanned.append(rel)
+        if truncated:
+            result.truncated.append(rel)
         result.findings.extend(scan_text(text, rel, rules))
     result.findings.sort(key=_finding_sort_key)
     return result

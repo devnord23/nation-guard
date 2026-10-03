@@ -74,10 +74,14 @@ class NormalizeTest(unittest.TestCase):
         n = nz.normalize("x&#xE0069;&#xE0067;&#xE006e;y")  # tag i,g,n
         self.assertIn("tag_chars", n.signals)
 
-    def test_views_are_additive_original_present(self):
-        n = nz.normalize("plain text only")
+    def test_raw_view_is_first_and_verbatim(self):
+        # Finding #8: the raw input is a genuine detection view, kept verbatim
+        # and first (so decoding can never erase a raw match).
+        src = "plain <b>text</b> &amp; only"
+        n = nz.normalize(src)
         names = [name for name, _ in n.views]
-        self.assertEqual(names[0], "text")
+        self.assertEqual(names[0], "raw")
+        self.assertEqual(n.view("raw"), src)
 
 
 if __name__ == "__main__":

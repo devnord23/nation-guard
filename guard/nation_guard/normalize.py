@@ -139,40 +139,70 @@ def _despace(text: str) -> str:
     return _SPACED_RE.sub(lambda m: re.sub(r"[ .\-_|]", "", m.group(0)), text)
 
 
+def _extract_html_comments(text: str):
+    """Forward-only HTML comment extraction (no regex backtracking).
+
+    A naive ``<!--(.*?)-->`` is quadratic on input with many ``<!--`` and no
+    closing ``-->``. We scan left-to-right with ``str.find`` instead, which is
+    linear and simply stops at the first unclosed comment.
+    """
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        s = text.find("<!--", i)
+        if s < 0:
+            break
+        e = text.find("-->", s + 4)
+        if e < 0:
+            break  # unclosed comment: stop, do not backtrack
+        out.append(text[s + 4:e])
+        i = e + 3
+    return out
+
+
 def normalize(text: str) -> Normalized:
     result = Normalized()
+
+    # The RAW input is kept as a genuine detection view (view name "raw") and is
+    # the only view used for line numbers, so (a) a match present in the raw
+    # bytes can never be erased by a later decode/fold, and (b) a reported line
+    # always refers to a real line in the original source — transforms that add
+    # or remove newlines can shift positions in the other views.
+    original = text
 
     # A single leading BOM is how editors mark UTF-8; it is not an attempt to
     # smuggle an invisible character, so drop one (and only one) before we
     # count. A BOM anywhere else, or a second one, still counts.
-    if text.startswith("﻿"):
-        text = text[1:]
+    t = text[1:] if text.startswith("﻿") else text
 
     # Decode HTML entities FIRST. An attacker can entity-encode an invisible or
     # tag character (e.g. "ig&#x200b;nore") so that stripping would run before
     # the character even exists; unescaping first means the smuggled character
     # is present when we count signals and strip it, closing that bypass.
-    text = html.unescape(text)
+    t = html.unescape(t)
 
-    invisible = len(_INVISIBLE_RE.findall(text)) + _count_suspicious_zwj(text)
+    invisible = len(_INVISIBLE_RE.findall(t)) + _count_suspicious_zwj(t)
     if invisible:
         result.signals["invisible_chars"] = invisible
-    tags = sum(len(m.group(0)) for m in _TAG_RE.finditer(text))
+    tags = sum(len(m.group(0)) for m in _TAG_RE.finditer(t))
     if tags:
         result.signals["tag_chars"] = tags
 
-    base = _TAG_RE.sub("", text)
+    base = _TAG_RE.sub("", t)
     base = _INVISIBLE_RE.sub("", base)
     base = "".join(ch for i, ch in enumerate(base) if ch != _ZWJ or _is_emoji_context(base, i))
     base = unicodedata.normalize("NFKC", base).translate(_CONFUSABLES)
 
-    result.views.append(("text", base))
+    result.views.append(("raw", original))
+    if base != original:
+        result.views.append(("text", base))
 
-    tag_text = _decode_tags(text)
+    tag_text = _decode_tags(t)
     if tag_text:
         result.views.append(("tag_chars", tag_text))
 
-    comments = "\n".join(m.group(1) for m in _HTML_COMMENT_RE.finditer(base))
+    comments = "\n".join(_extract_html_comments(base))
     if comments.strip():
         result.views.append(("html_comment", comments))
 

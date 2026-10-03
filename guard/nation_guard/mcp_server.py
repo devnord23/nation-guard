@@ -13,13 +13,14 @@ parse error so a hostile client cannot exhaust memory.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from . import __version__, integrity, state, targets
 from .rules import load_rules
-from .scanner import scan_root
+from .scanner import scan_file, scan_under
 
 PROTOCOL_VERSION = "2024-11-05"
 MAX_LINE_BYTES = 1024 * 1024
@@ -44,31 +45,37 @@ class Server:
 
     # ---- path safety -----------------------------------------------------
     def _resolve(self, subpath: Optional[str]) -> Path:
+        """Return the LOGICAL path for ``subpath`` after verifying its real
+        (symlink-resolved) location is contained in the server root.
+
+        We keep the logical (lexical) path so filename-scoped rules see the
+        file's true identity, but reject anything whose canonical path escapes
+        the root — including via a symlink or ``..``.
+        """
         if not subpath:
             return self.root
-        candidate = (self.root / subpath).resolve()
-        try:
-            candidate.relative_to(self.root)
-        except ValueError:
+        logical = Path(os.path.normpath(str(self.root / subpath)))
+        if not targets.real_within(logical, self.root):
             raise ValueError("path %r escapes the server root" % subpath)
-        return candidate
+        return logical
 
     # ---- tools -----------------------------------------------------------
     def tool_scan(self, args: dict) -> dict:
         target = self._resolve(args.get("path"))
+        truncated: List[str] = []
         if target.is_file():
-            from .scanner import scan_file
-
-            rel = targets.relpath(target, self.root)
+            rel = targets.lexical_relpath(target, self.root)
             findings = scan_file(target, rel, self.rules)
             scanned = [rel]
         else:
-            result = scan_root(target, self.rules)
+            result = scan_under(target, self.root, self.rules)
             findings = result.findings
             scanned = result.files_scanned
+            truncated = result.truncated
         return {
             "root": str(self.root),
             "files_scanned": len(scanned),
+            "truncated": truncated,
             "findings": [f.to_dict() for f in findings],
         }
 
@@ -87,7 +94,7 @@ class Server:
         instruction_files: List[str] = []
         mcp_servers: List[Dict[str, str]] = []
         for path in targets.iter_config_files(self.root):
-            rel = targets.relpath(path, self.root)
+            rel = targets.lexical_relpath(path, self.root)
             instruction_files.append(rel)
             key = targets.mcp_key_for(rel)
             if key:
@@ -99,9 +106,7 @@ class Server:
         if focus:
             target = self._resolve(focus)
             if target.is_file():
-                from .scanner import scan_file
-
-                rel = targets.relpath(target, self.root)
+                rel = targets.lexical_relpath(target, self.root)
                 focus_findings = [f.to_dict() for f in scan_file(target, rel, self.rules)]
         return {
             "root": str(self.root),
@@ -162,8 +167,10 @@ class Server:
                 return _tool_error(mid, str(exc))
             except Exception as exc:  # keep the server alive on tool bugs
                 return _tool_error(mid, "internal error: %s" % exc)
+            # ensure_ascii escapes any lone surrogate / non-BMP char so the
+            # final UTF-8 encode on the wire cannot raise on hostile content.
             return _result(mid, {
-                "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}],
+                "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=True, indent=2)}],
                 "isError": False,
             })
         if is_notification:
@@ -230,7 +237,15 @@ def serve(root: Path, instream=None, outstream=None) -> int:
     outstream = outstream or sys.stdout.buffer
 
     def send(obj: dict) -> None:
-        outstream.write((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+        # ensure_ascii keeps the payload pure ASCII (lone surrogates become
+        # \udcXX escapes), so .encode cannot raise; the fallback guards against
+        # any other serialization error so a response can never crash the loop.
+        try:
+            data = json.dumps(obj, ensure_ascii=True)
+        except (TypeError, ValueError):
+            mid = obj.get("id") if isinstance(obj, dict) else None
+            data = json.dumps(_error(mid, _INTERNAL, "response serialization failed"))
+        outstream.write((data + "\n").encode("ascii", "replace"))
         outstream.flush()
 
     while True:

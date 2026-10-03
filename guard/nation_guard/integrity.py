@@ -65,6 +65,22 @@ def _mcp_servers(path: Path, rel: str) -> Optional[Dict[str, str]]:
     return {name: _sha256(_canonical(entry).encode("utf-8")) for name, entry in servers.items()}
 
 
+def _sha256_file(path: Path):
+    """Hash the COMPLETE file in bounded chunks; return (hexdigest, size).
+
+    Integrity deliberately hashes the whole file — not just the first
+    ``MAX_FILE_BYTES`` the content scanner reads — so data appended past the
+    scan cap cannot change a file invisibly to ``verify``.
+    """
+    h = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+            size += len(chunk)
+    return h.hexdigest(), size
+
+
 def compute(root: Path) -> Dict[str, object]:
     root = Path(root).resolve()
     files: Dict[str, Dict[str, object]] = {}
@@ -72,12 +88,10 @@ def compute(root: Path) -> Dict[str, object]:
     for path in targets.iter_config_files(root):
         rel = targets.relpath(path, root)
         try:
-            data = path.read_bytes()
+            digest, size = _sha256_file(path)
         except OSError:
             continue
-        if len(data) > targets.MAX_FILE_BYTES:
-            data = data[: targets.MAX_FILE_BYTES]
-        files[rel] = {"sha256": _sha256(data), "size": len(data)}
+        files[rel] = {"sha256": digest, "size": size}
         servers = _mcp_servers(path, rel)
         if servers is not None:
             mcp[rel] = servers

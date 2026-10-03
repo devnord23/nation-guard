@@ -1,5 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-include LICENSE NOTICE README.md SECURITY.md CONTRIBUTING.md
+include LICENSE NOTICE README.md SECURITY.md CONTRIBUTING.md AGENTS.md
+include pyproject.toml .gitattributes
 recursive-include rules *.yaml
 recursive-include docs *.md
 include action/action.yml
+# Ship the test workflow in the sdist so it runs from an unpacked source dist
+# (tests import tests/_support.py; corpus/ and tools/ are required too).
+graft tests
+graft corpus
+graft tools
+global-exclude *.pyc
+prune **/__pycache__
